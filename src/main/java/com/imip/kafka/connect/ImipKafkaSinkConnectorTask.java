@@ -36,7 +36,7 @@ public class ImipKafkaSinkConnectorTask extends SinkTask {
     }
 
     private void processRecord(SinkRecord record) {
-        log.info(" Message received: {}", record.value().toString());
+        log.info("[{}] Message received: {}", record.topic(), record.value().toString());
     }
 
     @Override
