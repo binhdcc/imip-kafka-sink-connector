@@ -1,0 +1,1 @@
+{"schema":{"type":"struct","fields":[{"type":"int64","optional":false,"field":"ID"}],"optional":false,"name":"sapb1.TESTDB1.dbo.Emp1.Key"},"payload":{"ID":44}}

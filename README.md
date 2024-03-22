@@ -8,6 +8,9 @@ curl -X POST \
     -H "Content-Type:application/json" \
     http://localhost:8083/connectors
 
+curl -X POST http://localhost:8083/connectors/imip-sink-connector/restart
+
+
 curl -X DELETE \
     http://localhost:8083/connectors/imip-sink-connector
 ```

@@ -55,10 +55,10 @@ services:
       CONNECT_OFFSET_STORAGE_TOPIC: connect-offsets
       CONNECT_STATUS_STORAGE_TOPIC: connect-status
       CONNECT_VALUE_CONVERTER_SCHEMAS_ENABLE: "false"
-      CONNECT_INTERNAL_KEY_CONVERTER: "org.apache.kafka.connect.json.JsonConverter"
-      CONNECT_INTERNAL_VALUE_CONVERTER: "org.apache.kafka.connect.json.JsonConverter"
-      CONNECT_KEY_CONVERTER: "org.apache.kafka.connect.converters.ByteArrayConverter"
-      CONNECT_VALUE_CONVERTER: "org.apache.kafka.connect.json.JsonConverter"
+      CONNECT_INTERNAL_KEY_CONVERTER: "org.apache.kafka.connect.storage.StringConverter"
+      CONNECT_INTERNAL_VALUE_CONVERTER: "org.apache.kafka.connect.storage.StringConverter"
+      CONNECT_KEY_CONVERTER: "org.apache.kafka.connect.storage.StringConverter"
+      CONNECT_VALUE_CONVERTER: "org.apache.kafka.connect.storage.StringConverter"
       CONNECT_LOG4J_ROOT_LOGLEVEL: "INFO"
       CONNECT_LOG4J_LOGGERS: "org.apache.kafka.connect.runtime.rest=WARN,org.reflections=ERROR"
       CONNECT_CONFIG_STORAGE_REPLICATION_FACTOR: "1"
@@ -80,32 +80,32 @@ services:
   #     - .:/usr/share/java/kafka-connector-imip
   #   command: "bash -c 'cd /usr/share/java/kafka-connector-imip; mvn clean package'"
 
-  producer:
-    image: confluentinc/cp-kafka:7.3.1
-    hostname: producer
-    container_name: producer
-    command:
-      - /bin/sh
-      - -c
-      - |
-        while true
-          do echo '{"timestamp":'$(date +%s)'}' | \
-            /usr/bin/kafka-console-producer \
-            --bootstrap-server kafka:29092 \
-            --topic imip
-          sleep 0.01
-        done
-    depends_on:
-      kafka:
-        condition: service_healthy
+  # producer:
+  #   image: confluentinc/cp-kafka:7.3.1
+  #   hostname: producer
+  #   container_name: producer
+  #   command:
+  #     - /bin/sh
+  #     - -c
+  #     - |
+  #       while true
+  #         do echo '{"timestamp":'$(date +%s)'}' | \
+  #           /usr/bin/kafka-console-producer \
+  #           --bootstrap-server kafka:29092 \
+  #           --topic imip
+  #         sleep 0.01
+  #       done
+  #   depends_on:
+  #     kafka:
+  #       condition: service_healthy
 
-  consumer:
-    image: confluentinc/cp-kafka:7.3.1
-    hostname: consumer
-    container_name: consumer
-    command: "bash -c 'while true; do /usr/bin/kafka-console-consumer --bootstrap-server kafka:29092 --topic imip; sleep 1; done'"
-    depends_on:
-      connect:
-        condition: service_healthy
-      kafka:
-        condition: service_healthy
+  # consumer:
+  #   image: confluentinc/cp-kafka:7.3.1
+  #   hostname: consumer
+  #   container_name: consumer
+  #   command: "bash -c 'while true; do /usr/bin/kafka-console-consumer --bootstrap-server kafka:29092 --topic imip; sleep 1; done'"
+  #   depends_on:
+  #     connect:
+  #       condition: service_healthy
+  #     kafka:
+  #       condition: service_healthy
