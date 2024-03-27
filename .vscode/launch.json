@@ -6,17 +6,17 @@
   "configurations": [
     {
       "type": "java",
-      "name": "Current File",
+      "name": "ImipKafkaOpeator",
       "request": "launch",
-      "mainClass": "${file}"
+      "mainClass": "com.imip.kafka.connect.ImipKafkaOpeator",
+      "projectName": "kafka-connect-imip",
+      "vmArgs": "--add-exports java.base/sun.nio.ch=ALL-UNNAMED"
     },
     {
       "type": "java",
-      "name": "ImipSparkOperator",
+      "name": "Current File",
       "request": "launch",
-      "mainClass": "com.imip.kafka.connect.ImipSparkOperator",
-      "projectName": "kafka-connect-imip",
-      "vmArgs": "--add-exports java.base/sun.nio.ch=ALL-UNNAMED"
+      "mainClass": "${file}"
     }
   ]
 }

@@ -213,7 +213,7 @@
 			"commit_lsn": "0000004e:00000f46:0003",
 			"event_serial_no": 1
 		},
-		"op": "c",
+		"op": "u",
 		"ts_ms": 1711014404351,
 		"transaction": null
 	}

@@ -8,7 +8,7 @@
         "minio.access_key": "XPjoZ8Vk78vWsY5DroNc",
         "minio.secret_key": "c8zF1Hf82dLlg9tpLPTTrjjK4nEkpMf6lnkDkVwH",
         "connector.class": "com.imip.kafka.connect.ImipKafkaSinkConnector",
-        "tasks.max": "3",
+        "tasks.max": "1",
         "value.deserializer":"custom.class.serialization.JsonDeserializer",
         "value.serializer":"custom.class.serialization.JsonSerializer"
 

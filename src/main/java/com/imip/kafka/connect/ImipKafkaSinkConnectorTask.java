@@ -9,6 +9,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.google.gson.JsonObject;
+
 import com.google.gson.JsonParser;
 
 import java.util.Collection;
@@ -17,6 +18,8 @@ import java.util.concurrent.CopyOnWriteArrayList;
 
 public class ImipKafkaSinkConnectorTask extends SinkTask {
     private final static Logger logger = LoggerFactory.getLogger(ImipKafkaSinkConnectorTask.class);
+    // private ImipSparkOperator sparkOp;
+    private ImipSparkOperator iso;
 
     @Nullable
     private ErrantRecordReporter reporter;
@@ -32,6 +35,7 @@ public class ImipKafkaSinkConnectorTask extends SinkTask {
     public void initialize(SinkTaskContext context) {
         super.initialize(context);
         reporter = context.errantRecordReporter();
+        this.iso = new ImipSparkOperator();
     }
 
     @Override
@@ -50,12 +54,14 @@ public class ImipKafkaSinkConnectorTask extends SinkTask {
                 String op = payloadObj.get("op").getAsString();
                 logger.info("after data: {}", payloadObj.get("after").toString());
                 switch(op) {
-                    
                     case "c":
                         logger.info("Process case CREATE");
                         break;
                     case "u":
                         logger.info("Process case UPDATE");
+                        this.iso.updateRecord(record.topic(), 
+                                            payloadObj.getAsJsonObject("after"), 
+                                            record.key().toString());
                         break;
                     default:
                         logger.error("Operator invalid");
