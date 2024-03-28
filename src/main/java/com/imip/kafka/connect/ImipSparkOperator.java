@@ -1,21 +1,21 @@
 package com.imip.kafka.connect;
 
 import org.apache.spark.SparkConf;
-import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.SparkSession;
+import org.slf4j.Logger;
 import org.apache.spark.sql.Encoders;
 import org.apache.commons.codec.digest.DigestUtils;
-import org.apache.hadoop.conf.Configuration;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
 import com.google.gson.JsonObject;
 import java.util.Arrays;
 import java.util.List;
 
 public class ImipSparkOperator {
-  // private final Logger logger = LoggerFactory.getLogger(this.toString());
+  private final static Logger logger = LoggerFactory.getLogger("ImipSparkOperator");
   private SparkConf conf;
   private SparkSession spark;
   // private MinioClient minioClient;
@@ -45,24 +45,26 @@ public class ImipSparkOperator {
     // this.hadoopConf.set("spark.hadoop.fs.s3a.aws.credentials.provider",
     // "org.apache.hadoop.fs.s3a.SimpleAWSCredentialsProvider");
 
+    this.conf = new SparkConf()
+    .setAppName("WriteJsonToDeltaLakeAndMinIO")
+    .setMaster("local[*]") // Set master URL for local mode
+    .set("spark.hadoop.fs.s3a.endpoint", "http://127.0.0.1:9000")
+    .set("spark.hadoop.fs.s3a.access.key", "NF2uF9BAICYJydkwCn2X")
+    .set("spark.hadoop.fs.s3a.secret.key", "jbM1NJApsXGzTJKxCWPwgVIcW6Qiy2diYLzpFUE9")
+    .set("spark.hadoop.fs.s3a.path.style.access", "true")
+    .set("spark.hadoop.fs.s3a.aws.credentials.provider",
+        "org.apache.hadoop.fs.s3a.SimpleAWSCredentialsProvider");
+
     // Create Spark session
     this.spark = SparkSession.builder()
         .config(this.conf)
         .getOrCreate();
 
-    this.conf = new SparkConf()
-        .setAppName("WriteJsonToDeltaLakeAndMinIO")
-        .setMaster("local[*]") // Set master URL for local mode
-        .set("spark.hadoop.fs.s3a.endpoint", "http://127.0.0.1:9000")
-        .set("spark.hadoop.fs.s3a.access.key", "NF2uF9BAICYJydkwCn2X")
-        .set("spark.hadoop.fs.s3a.secret.key", "jbM1NJApsXGzTJKxCWPwgVIcW6Qiy2diYLzpFUE9")
-        .set("spark.hadoop.fs.s3a.path.style.access", "true")
-        .set("spark.hadoop.fs.s3a.aws.credentials.provider",
-            "org.apache.hadoop.fs.s3a.SimpleAWSCredentialsProvider");
-    // Create Spark session
-    SparkSession spark = SparkSession.builder()
-        .config(conf)
-        .getOrCreate();
+
+    // // Create Spark session
+    // SparkSession spark = SparkSession.builder()
+    //     .config(conf)
+    //     .getOrCreate();
   }
 
   public void loadJsonKeyValue(JsonObject jsonObject) {
@@ -115,7 +117,8 @@ public class ImipSparkOperator {
 
   }
 
-  public static void main(String[] args) {
-    ImipSparkOperator iso = new ImipSparkOperator();
-  }
+  // public static void main(String[] args) {
+    // ImipSparkOperator iso = new ImipSparkOperator();
+    // logger.info("ABC");
+  // }
 }

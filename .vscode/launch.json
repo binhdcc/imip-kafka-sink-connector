@@ -6,6 +6,20 @@
   "configurations": [
     {
       "type": "java",
+      "name": "KafkaToDeltaStreaming",
+      "request": "launch",
+      "mainClass": "com.imip.kafka.connect.KafkaToDeltaStreaming",
+      "projectName": "kafka-connect-imip"
+    },
+    {
+      "type": "java",
+      "name": "ImipSparkOperator",
+      "request": "launch",
+      "mainClass": "com.imip.kafka.connect.ImipSparkOperator",
+      "projectName": "kafka-connect-imip"
+    },
+    {
+      "type": "java",
       "name": "ImipKafkaOpeator",
       "request": "launch",
       "mainClass": "com.imip.kafka.connect.ImipKafkaOpeator",
@@ -16,7 +30,9 @@
       "type": "java",
       "name": "Current File",
       "request": "launch",
-      "mainClass": "${file}"
+      "mainClass": "com.imip.kafka.connect.",
+      "projectName": "kafka-connect-imip",
+      "vmArgs": "--add-exports java.base/sun.nio.ch=ALL-UNNAMED"
     }
   ]
 }
