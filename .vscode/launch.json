@@ -20,9 +20,9 @@
     },
     {
       "type": "java",
-      "name": "ImipKafkaOpeator",
+      "name": "ImipKafkaOperator",
       "request": "launch",
-      "mainClass": "com.imip.kafka.connect.ImipKafkaOpeator",
+      "mainClass": "com.imip.kafka.connect.ImipKafkaOperator",
       "projectName": "kafka-connect-imip",
       "vmArgs": "--add-exports java.base/sun.nio.ch=ALL-UNNAMED"
     },
