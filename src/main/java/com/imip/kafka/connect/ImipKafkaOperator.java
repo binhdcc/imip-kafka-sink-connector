@@ -23,15 +23,15 @@ public class ImipKafkaOperator {
     public static void main(String[] args) {
         SparkConf conf = new SparkConf()
                 .setAppName("ImipKafkaOperator")
-                .setMaster("local[2]")
+                .setMaster("local[*]")
                 .set("spark.hadoop.fs.s3a.endpoint", "http://127.0.0.1:9000")
                 .set("spark.hadoop.fs.s3a.access.key", "NF2uF9BAICYJydkwCn2X")
                 .set("spark.hadoop.fs.s3a.secret.key", "jbM1NJApsXGzTJKxCWPwgVIcW6Qiy2diYLzpFUE9")
                 .set("spark.hadoop.fs.s3a.path.style.access", "true")
                 .set("spark.hadoop.fs.s3a.aws.credentials.provider",
-                    "org.apache.hadoop.fs.s3a.SimpleAWSCredentialsProvider");
-                // .set("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension")
-                // .set("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog");
+                    "org.apache.hadoop.fs.s3a.SimpleAWSCredentialsProvider")
+                .set("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension")
+                .set("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog");
                     
 
       // Create Spark session
@@ -44,6 +44,8 @@ public class ImipKafkaOperator {
         props.put(ConsumerConfig.GROUP_ID_CONFIG, "imip-consumer-group"); // Specify consumer group
         props.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class.getName());
         props.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class.getName());
+        props.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "latest");
+
 
         // Create Kafka consumer
         KafkaConsumer<String, String> consumer = new KafkaConsumer<>(props);
@@ -77,12 +79,15 @@ public class ImipKafkaOperator {
 
                                 logger.info("deltaPathFile: {}", deltaPathFile);
                                 List<String> jsonData = Arrays.asList(payloadObj.get("after").toString());
+
+                                logger.info("data jsonData: {}", jsonData.toString());
+                                
                                 Dataset<String> tempDataSet = spark.createDataset(jsonData, Encoders.STRING());
                                 Dataset<Row> df = spark.read().json(tempDataSet);
                                 df.show();
                                 // Write DataFrame to Delta Lake
                                 df.write()
-                                .format("parquet")
+                                .format("delta")
                                 .mode("append")
                                 .save(deltaPathFile);
                             } catch(Exception e) {
