@@ -90,6 +90,9 @@ public class ImipKafkaOperator {
                                 .format("delta")
                                 .mode("append")
                                 .save(deltaPathFile);
+                                
+                                df = spark.read().format("delta").load(deltaPathFile);
+                                df.show();
                             } catch(Exception e) {
                                 e.printStackTrace();
                             }
