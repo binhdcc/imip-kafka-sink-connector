@@ -20,4 +20,35 @@ public class GsonTest {
             System.out.println("Key: " + key + ", Value: " + value);
         }
     }
+
+    @Test
+    public void generateConditions() {
+        // Example JSON input
+        String jsonString = "{\"conditions\": [{\"column\": \"column1\", \"value\": \"value1\"}, {\"column\": \"column2\", \"value\": \"value2\"}]}";
+
+        // Parse JSON string
+        Gson gson = new Gson();
+        JsonObject jsonObject = gson.fromJson(jsonString, JsonObject.class);
+        JsonArray conditionsArray = jsonObject.getAsJsonArray("conditions");
+
+        // Generate conditions
+        StringBuilder conditionsBuilder = new StringBuilder();
+        for (int i = 0; i < conditionsArray.size(); i++) {
+            JsonObject conditionObject = conditionsArray.get(i).getAsJsonObject();
+            String column = conditionObject.get("column").getAsString();
+            String value = conditionObject.get("value").getAsString();
+
+            // Construct condition
+            conditionsBuilder.append(column).append(" = '").append(value).append("'");
+
+            // Append "AND" for all conditions except the last one
+            if (i < conditionsArray.size() - 1) {
+                conditionsBuilder.append(" AND ");
+            }
+        }
+
+        // Output generated conditions
+        String conditions = conditionsBuilder.toString();
+        System.out.println("Generated conditions: " + conditions);
+    }
 }

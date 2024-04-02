@@ -4,9 +4,11 @@ import org.apache.kafka.clients.consumer.*;
 import org.apache.kafka.common.serialization.StringDeserializer;
 import org.apache.spark.SparkConf;
 import org.apache.spark.sql.SparkSession;
+import org.apache.spark.sql.functions;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Encoders;
 import org.apache.spark.sql.Row;
+import io.delta.tables.*;
 
 import com.google.gson.JsonObject;
 import java.time.Duration;
@@ -20,6 +22,69 @@ import java.util.List;
 
 public class ImipKafkaOperator {
     private final static Logger logger = LoggerFactory.getLogger(ImipKafkaOperator.class);
+    // This method testing show data only
+    public static void showTable(SparkSession spark, String fullPathTable) {
+        Dataset<Row> df = spark.read().format("delta").load(fullPathTable);
+        df.show();
+    }
+
+    public static void createRecordDelta(SparkSession spark, String fullPathTable, JsonObject data) {
+        List<String> jsonData = Arrays.asList(data.get("after").toString());
+        Dataset<String> tempDataSet = spark.createDataset(jsonData, Encoders.STRING());
+        Dataset<Row> df = spark.read().json(tempDataSet);
+        df.show();
+        df.write()
+                .format("delta")
+                .mode("append")
+                .save(fullPathTable);
+    }
+
+    public static void updateRecordDelta(SparkSession spark, String fullPathTable, JsonObject conditions,
+            JsonObject updates) {
+        try {
+            logger.info("data in updateRecordDelta: '{}':'{}'", conditions.toString(), updates.toString());
+            Dataset<Row> deltaTable = spark.read().format("delta").load(fullPathTable);
+            Dataset<Row> filteredData = deltaTable;
+            for (String column : conditions.keySet()) {
+                String value = conditions.get(column).getAsString();
+                logger.info("data-update: '{}':'{}'", column, value);
+                filteredData = filteredData.filter(functions.col(column).equalTo(value));
+            }
+            Dataset<Row> updatedData = filteredData;
+            for (String column : updates.keySet()) {
+                if (conditions.keySet().contains(column))
+                    continue;
+                String value = updates.get(column).getAsString();
+                logger.info("data-update: '{}':'{}'", column, value);
+                updatedData = updatedData.withColumn(column, functions.lit(value));
+            }
+            updatedData.write().format("delta").mode("overwrite").save(fullPathTable);
+        } catch (Exception e) {
+            logger.error(e.getMessage());
+        }
+    }
+
+    public static void deleteRecordDelta(SparkSession spark, String fullPathTable, JsonObject conditions) {
+        try {
+            DeltaTable deltaTable = DeltaTable.forPath(fullPathTable);
+
+            // Dataset<Row> deltaTable = spark.read().format("delta").load(fullPathTable);
+            StringBuilder conditionsBuilder = new StringBuilder();
+            int index = 0;
+            for (String column : conditions.keySet()) {
+                String value = conditions.get(column).getAsString();
+                if (index > 0)
+                    conditionsBuilder.append(" AND ");
+                conditionsBuilder.append(column).append(" = '").append(value).append("'");
+                index++;
+            }
+            deltaTable.delete(conditionsBuilder.toString());
+
+        } catch (Exception e) {
+            logger.error(e.getMessage());
+        }
+    }
+
     public static void main(String[] args) {
         SparkConf conf = new SparkConf()
                 .setAppName("ImipKafkaOperator")
@@ -62,53 +127,50 @@ public class ImipKafkaOperator {
                             record.key(), record.value(), record.partition(), record.offset());
                     // Process the message here
                     System.out.printf("Spark: %s", spark.sessionUUID());
-                              if (record.value() != null) {
-                    JsonObject jsonObject = JsonParser.parseString(record.value().toString()).getAsJsonObject();
-                    logger.info("value json: {}", jsonObject.toString());
-                    logger.info("payload: {}", jsonObject.get("payload").toString());
-                    // create or update
-                    JsonObject payloadObj = jsonObject.getAsJsonObject("payload");
-                    String op = payloadObj.get("op").getAsString();
-                    logger.info("after data: {}", payloadObj.get("after").toString());
-                    switch(op) {
-                        case "c":
-                            logger.info("Process case CREATE");
-                            try {
-                                // String deltaPathFile = String.format("/tmp/test/%s", record.topic());
-                                String deltaPathFile = String.format("s3a://imip-delta-lake/%s", record.topic());
 
-                                logger.info("deltaPathFile: {}", deltaPathFile);
-                                List<String> jsonData = Arrays.asList(payloadObj.get("after").toString());
+                    JsonObject keyObj = JsonParser.parseString(record.key().toString()).getAsJsonObject();
+                    logger.info("key json: {}", keyObj.toString());
+                    JsonObject keyPayload = keyObj.getAsJsonObject("payload");
+                    logger.info("key payload data: {}", keyPayload.toString());
+                    String deltaPathFile = String.format("s3a://imip-delta-lake/%s", record.topic());
 
-                                logger.info("data jsonData: {}", jsonData.toString());
-                                
-                                Dataset<String> tempDataSet = spark.createDataset(jsonData, Encoders.STRING());
-                                Dataset<Row> df = spark.read().json(tempDataSet);
-                                df.show();
-                                // Write DataFrame to Delta Lake
-                                df.write()
-                                .format("delta")
-                                .mode("append")
-                                .save(deltaPathFile);
-                                
-                                df = spark.read().format("delta").load(deltaPathFile);
-                                df.show();
-                            } catch(Exception e) {
-                                e.printStackTrace();
-                            }
+                    if (record.value() != null) {
+                        JsonObject valueObj = JsonParser.parseString(record.value().toString()).getAsJsonObject();
+                        logger.info("value json: {}", valueObj.toString());
+                        logger.info("payload: {}", valueObj.get("payload").toString());
+                        // create or update
+                        JsonObject valuePayload = valueObj.getAsJsonObject("payload");
+                        JsonObject afterObj = valuePayload.getAsJsonObject("after");
+                        String op = valuePayload.get("op").getAsString();
+                        logger.info("after data: {}", valuePayload.get("after").toString());
+                        switch(op) {
+                            case "c":
+                                logger.info("Process case CREATE");
+                                try {
+                                    logger.info("deltaPathFile: {}", deltaPathFile);
+                                    createRecordDelta(spark, deltaPathFile, valuePayload);
+                                    showTable(spark, deltaPathFile);
 
-                            break;
-                        case "u":
-                            logger.info("Process case UPDATE");
-                            break;
-                        default:
-                            logger.error("Operator invalid");
+                                } catch(Exception e) {
+                                    e.printStackTrace();
+                                }
+
+                                break;
+                            case "u":
+                                logger.info("Process case UPDATE");
+                                updateRecordDelta(spark, deltaPathFile, keyPayload, afterObj);
+                                showTable(spark, deltaPathFile);
+                                break;
+                            default:
+                                logger.error("Operator invalid");
+                        }
                     }
-                }
-                else {
-                    // delete 
-                    logger.info("Process case DELETE");
-                }
+                    else {
+                        // delete 
+                        logger.info("Process case DELETE");
+                        deleteRecordDelta(spark, deltaPathFile, keyPayload);
+                        showTable(spark, deltaPathFile);
+                    }
                 }
             }
         } finally {
@@ -116,4 +178,3 @@ public class ImipKafkaOperator {
         }
     }
 }
-
