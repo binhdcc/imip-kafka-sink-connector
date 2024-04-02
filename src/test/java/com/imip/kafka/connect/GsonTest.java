@@ -2,6 +2,7 @@ package com.imip.kafka.connect;
 import org.junit.Test;
 import com.google.gson.*;
 
+
 public class GsonTest {
     @Test
     public void testKeyValueParser() {
