@@ -18,9 +18,6 @@ import java.util.concurrent.CopyOnWriteArrayList;
 
 public class ImipKafkaSinkConnectorTask extends SinkTask {
     private final static Logger logger = LoggerFactory.getLogger(ImipKafkaSinkConnectorTask.class);
-    // private ImipSparkOperator sparkOp;
-    private ImipSparkOperator iso;
-
     @Nullable
     private ErrantRecordReporter reporter;
 
@@ -35,7 +32,6 @@ public class ImipKafkaSinkConnectorTask extends SinkTask {
     public void initialize(SinkTaskContext context) {
         super.initialize(context);
         reporter = context.errantRecordReporter();
-        this.iso = new ImipSparkOperator();
     }
 
     @Override
@@ -59,9 +55,6 @@ public class ImipKafkaSinkConnectorTask extends SinkTask {
                         break;
                     case "u":
                         logger.info("Process case UPDATE");
-                        this.iso.updateRecord(record.topic(), 
-                                            payloadObj.getAsJsonObject("after"), 
-                                            record.key().toString());
                         break;
                     default:
                         logger.error("Operator invalid");

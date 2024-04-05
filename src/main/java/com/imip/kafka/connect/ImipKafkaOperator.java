@@ -12,20 +12,30 @@ import io.delta.tables.*;
 
 import com.google.gson.JsonObject;
 import java.time.Duration;
-import java.util.Collections;
 import java.util.Properties;
 import com.google.gson.JsonParser;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import java.util.Arrays;
 import java.util.List;
-
+import java.util.HashSet;
+import java.util.Set;
+import io.github.cdimascio.dotenv.Dotenv;
 public class ImipKafkaOperator {
+    
+    private final static Dotenv dotenv = Dotenv.load();
     private final static Logger logger = LoggerFactory.getLogger(ImipKafkaOperator.class);
     // This method testing show data only
     public static void showTable(SparkSession spark, String fullPathTable) {
         Dataset<Row> df = spark.read().format("delta").load(fullPathTable);
         df.show();
+    }
+
+    public static Set<String> loadTopicsFromEnv(Dotenv dotenv) {
+        String topicsString = dotenv.get("KAFKA_TOPICS");
+        String[] topics = topicsString.split(",");
+        Set<String> listTopics = new HashSet<>(Arrays.asList(topics));
+        return listTopics;
     }
 
     public static void createRecordDelta(SparkSession spark, String fullPathTable, JsonObject data) {
@@ -90,8 +100,8 @@ public class ImipKafkaOperator {
                 .setAppName("ImipKafkaOperator")
                 .setMaster("local[*]")
                 .set("spark.hadoop.fs.s3a.endpoint", "http://127.0.0.1:9000")
-                .set("spark.hadoop.fs.s3a.access.key", "NF2uF9BAICYJydkwCn2X")
-                .set("spark.hadoop.fs.s3a.secret.key", "jbM1NJApsXGzTJKxCWPwgVIcW6Qiy2diYLzpFUE9")
+                .set("spark.hadoop.fs.s3a.access.key", "9i0VOsPZnmXqQCGhsVYE")
+                .set("spark.hadoop.fs.s3a.secret.key", "XDxIj7jJIokF7JNoEEtyX9kxMwvnjPh2ObrzBidL")
                 .set("spark.hadoop.fs.s3a.path.style.access", "true")
                 .set("spark.hadoop.fs.s3a.aws.credentials.provider",
                     "org.apache.hadoop.fs.s3a.SimpleAWSCredentialsProvider")
@@ -105,8 +115,8 @@ public class ImipKafkaOperator {
               .getOrCreate();
         // Set Kafka broker properties
         Properties props = new Properties();
-        props.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, "localhost:9092"); // Change to your Kafka broker address
-        props.put(ConsumerConfig.GROUP_ID_CONFIG, "imip-consumer-group"); // Specify consumer group
+        props.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, dotenv.get("KAFKA_BROKER")); // Change to your Kafka broker address
+        props.put(ConsumerConfig.GROUP_ID_CONFIG, dotenv.get("KAFKA_GROUP_ID")); // Specify consumer group
         props.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class.getName());
         props.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class.getName());
         props.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "latest");
@@ -116,7 +126,7 @@ public class ImipKafkaOperator {
         KafkaConsumer<String, String> consumer = new KafkaConsumer<>(props);
 
         // Subscribe to Kafka topic
-        consumer.subscribe(Collections.singletonList("imip")); // Change to your topic name
+        consumer.subscribe(loadTopicsFromEnv(dotenv)); // Change to your topic name
 
         // Start consuming messages
         try {
@@ -132,7 +142,7 @@ public class ImipKafkaOperator {
                     logger.info("key json: {}", keyObj.toString());
                     JsonObject keyPayload = keyObj.getAsJsonObject("payload");
                     logger.info("key payload data: {}", keyPayload.toString());
-                    String deltaPathFile = String.format("s3a://imip-delta-lake/%s", record.topic());
+                    String deltaPathFile = String.format("s3a://imip-delta-lake/%s", record.topic().replace(".", "_").toLowerCase());
 
                     if (record.value() != null) {
                         JsonObject valueObj = JsonParser.parseString(record.value().toString()).getAsJsonObject();
@@ -148,7 +158,7 @@ public class ImipKafkaOperator {
                                 logger.info("Process case CREATE");
                                 try {
                                     logger.info("deltaPathFile: {}", deltaPathFile);
-                                    createRecordDelta(spark, deltaPathFile, valuePayload);
+                                    createRecordDelta(spark, deltaPathFile, valuePayload); 
                                     showTable(spark, deltaPathFile);
 
                                 } catch(Exception e) {

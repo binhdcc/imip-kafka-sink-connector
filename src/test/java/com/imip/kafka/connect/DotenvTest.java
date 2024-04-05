@@ -13,6 +13,9 @@ public class DotenvTest {
     String topicsString = dotenv.get("KAFKA_TOPICS");
     String[] topics = topicsString.split(",");
 
+    String minioAccesskey = dotenv.get("MINIO_ACCESS_KEY");
+    System.out.println("minioAccessKey: " + minioAccesskey);
+
     // Use the environment variables in your application
     for (String t : topics) {
       System.out.println(t);
