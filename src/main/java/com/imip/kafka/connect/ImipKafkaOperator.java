@@ -99,9 +99,9 @@ public class ImipKafkaOperator {
         SparkConf conf = new SparkConf()
                 .setAppName("ImipKafkaOperator")
                 .setMaster("local[*]")
-                .set("spark.hadoop.fs.s3a.endpoint", "http://127.0.0.1:9000")
-                .set("spark.hadoop.fs.s3a.access.key", "9i0VOsPZnmXqQCGhsVYE")
-                .set("spark.hadoop.fs.s3a.secret.key", "XDxIj7jJIokF7JNoEEtyX9kxMwvnjPh2ObrzBidL")
+                .set("spark.hadoop.fs.s3a.endpoint", dotenv.get("MINIO_ENDPOINT"))
+                .set("spark.hadoop.fs.s3a.access.key", dotenv.get("MINIO_ACCESS_KEY"))
+                .set("spark.hadoop.fs.s3a.secret.key", dotenv.get("MINIO_SECRET_KEY"))
                 .set("spark.hadoop.fs.s3a.path.style.access", "true")
                 .set("spark.hadoop.fs.s3a.aws.credentials.provider",
                     "org.apache.hadoop.fs.s3a.SimpleAWSCredentialsProvider")
