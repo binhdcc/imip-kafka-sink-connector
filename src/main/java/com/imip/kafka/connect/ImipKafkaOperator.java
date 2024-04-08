@@ -107,11 +107,12 @@ public class ImipKafkaOperator {
                     "org.apache.hadoop.fs.s3a.SimpleAWSCredentialsProvider")
                 .set("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension")
                 .set("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog");
-                    
 
       // Create Spark session
       SparkSession spark = SparkSession.builder()
               .config(conf)
+              .config("hive.metastore.uris", dotenv.get("HIVE_METASTORE_URIS"))
+              .enableHiveSupport()
               .getOrCreate();
         // Set Kafka broker properties
         Properties props = new Properties();

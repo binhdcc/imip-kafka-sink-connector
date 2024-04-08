@@ -39,6 +39,13 @@
     </dependency>
 
 
+    <dependency>
+        <groupId>org.apache.spark</groupId>
+        <artifactId>spark-hive_2.13</artifactId>
+        <version>3.5.1</version>
+        <scope>provided</scope>
+    </dependency>
+
     <!-- https://mvnrepository.com/artifact/org.apache.spark/spark-core -->
     <dependency>
         <groupId>org.apache.spark</groupId>
