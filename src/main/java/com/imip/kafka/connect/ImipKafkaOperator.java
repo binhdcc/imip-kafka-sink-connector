@@ -20,6 +20,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.HashSet;
 import java.util.Set;
+import java.util.UUID;
 import io.github.cdimascio.dotenv.Dotenv;
 public class ImipKafkaOperator {
     
@@ -36,6 +37,31 @@ public class ImipKafkaOperator {
         String[] topics = topicsString.split(",");
         Set<String> listTopics = new HashSet<>(Arrays.asList(topics));
         return listTopics;
+    }
+
+    public static void upsertRecordDelta(SparkSession spark, String fullPathTable, JsonObject conditions, JsonObject data) {
+        String[] keyColumns = conditions.keySet().toArray(String[]::new);
+        // Read the Delta table
+        Dataset<Row> deltaTable = spark.read().format("delta").load(fullPathTable);
+
+       // Perform the upsert
+       deltaTable.createOrReplaceTempView("deltaTable");
+
+       List<String> jsonData = Arrays.asList(data.get("after").toString());
+       Dataset<String> tempDataSet = spark.createDataset(jsonData, Encoders.STRING());
+       Dataset<Row> dfUpdates = spark.read().json(tempDataSet);
+       dfUpdates.createOrReplaceTempView("updates");
+
+       String mergeQuery = String.format(
+                "MERGE INTO deltaTable AS target " +
+                        "USING updates AS source " +
+                        "ON " + Arrays.stream(keyColumns).map(c -> "target." + c + " = source." + c).
+                                reduce((s1, s2) -> s1 + " AND " + s2).orElse("") +
+                        " WHEN MATCHED THEN UPDATE SET * " +
+                        " WHEN NOT MATCHED THEN INSERT *"
+        );
+
+       spark.sql(mergeQuery);
     }
 
     public static void createRecordDelta(SparkSession spark, String fullPathTable, JsonObject data) {
@@ -114,13 +140,15 @@ public class ImipKafkaOperator {
               .config("hive.metastore.uris", dotenv.get("HIVE_METASTORE_URIS"))
               .enableHiveSupport()
               .getOrCreate();
+
         // Set Kafka broker properties
         Properties props = new Properties();
         props.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, dotenv.get("KAFKA_BROKER")); // Change to your Kafka broker address
-        props.put(ConsumerConfig.GROUP_ID_CONFIG, dotenv.get("KAFKA_GROUP_ID")); // Specify consumer group
+        props.put(ConsumerConfig.GROUP_ID_CONFIG, UUID.randomUUID().toString());
+        // props.put(ConsumerConfig.GROUP_ID_CONFIG, dotenv.get("KAFKA_GROUP_ID")); // Specify consumer group
         props.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class.getName());
         props.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class.getName());
-        props.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "latest");
+        props.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest");
 
 
         // Create Kafka consumer
@@ -143,7 +171,8 @@ public class ImipKafkaOperator {
                     logger.info("key json: {}", keyObj.toString());
                     JsonObject keyPayload = keyObj.getAsJsonObject("payload");
                     logger.info("key payload data: {}", keyPayload.toString());
-                    String deltaPathFile = String.format("s3a://imip-delta-lake/%s", record.topic().replace(".", "_").toLowerCase());
+                    // String deltaPathFile = String.format("s3a://imip-delta-lake/%s", record.topic().replace(".", "_").toLowerCase());
+                    String deltaPathFile = "s3a://imip-delta-lake/pps_testdb1_dbo_emp2";
 
                     if (record.value() != null) {
                         JsonObject valueObj = JsonParser.parseString(record.value().toString()).getAsJsonObject();
@@ -151,7 +180,7 @@ public class ImipKafkaOperator {
                         logger.info("payload: {}", valueObj.get("payload").toString());
                         // create or update
                         JsonObject valuePayload = valueObj.getAsJsonObject("payload");
-                        JsonObject afterObj = valuePayload.getAsJsonObject("after");
+                        // JsonObject afterObj = valuePayload.getAsJsonObject("after");
                         String op = valuePayload.get("op").getAsString();
                         logger.info("after data: {}", valuePayload.get("after").toString());
                         switch(op) {
@@ -159,7 +188,8 @@ public class ImipKafkaOperator {
                                 logger.info("Process case CREATE");
                                 try {
                                     logger.info("deltaPathFile: {}", deltaPathFile);
-                                    createRecordDelta(spark, deltaPathFile, valuePayload); 
+                                    // createRecordDelta(spark, deltaPathFile, valuePayload);
+                                    upsertRecordDelta(spark, deltaPathFile, keyPayload, valuePayload);
                                     showTable(spark, deltaPathFile);
 
                                 } catch(Exception e) {
@@ -169,8 +199,15 @@ public class ImipKafkaOperator {
                                 break;
                             case "u":
                                 logger.info("Process case UPDATE");
-                                updateRecordDelta(spark, deltaPathFile, keyPayload, afterObj);
-                                showTable(spark, deltaPathFile);
+                                try {
+                                    logger.info("deltaPathFile: {}", deltaPathFile);
+                                    // createRecordDelta(spark, deltaPathFile, valuePayload);
+                                    upsertRecordDelta(spark, deltaPathFile, keyPayload, valuePayload);
+                                    showTable(spark, deltaPathFile);
+
+                                } catch(Exception e) {
+                                    e.printStackTrace();
+                                }
                                 break;
                             default:
                                 logger.error("Operator invalid");
