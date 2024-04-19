@@ -4,7 +4,6 @@ import org.apache.spark.SparkConf;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.SparkSession;
-import org.apache.spark.sql.catalog.Table;
 import org.apache.spark.sql.types.DataType;
 import org.apache.spark.sql.types.*;
 import org.apache.spark.sql.types.StructField;
@@ -24,96 +23,122 @@ public class ImipDataMigrate {
   private final static Dotenv dotenv = Dotenv.load();
   private final static Logger logger = LoggerFactory.getLogger(ImipKafkaOperator.class);
 
-  private static void executeTrinoQL(String command) {
-    // Trino connection properties
-    String trinoUrl = "jdbc:trino://172.31.100.19:8080/delta/pps";
-    String trinoUser = "admin";
-    String trinoPassword = "";
-    String tableLocation = "s3a://imip-delta-lake/message2";
-
-    // SQL statement to create the table in Trino
-    String createTableSQL = "CREATE TABLE IF NOT EXISTS messages2 ("
-        + "id INT,"
-        + "name VARCHAR(100)"
-        + ") WITH (location = '" + tableLocation + "')";
-
+  private static void executeTrinoQL(String tUrl, String tDbName, String tSchema, String tUser, String tPassword,
+      String command) {
     // Establish JDBC connection to Trino
-    try (Connection connection = DriverManager.getConnection(trinoUrl, trinoUser,
-        trinoPassword);
+    String fullUrl = String.format("%s/%s/%s", tUrl, tDbName, tSchema);
+    try (Connection connection = DriverManager.getConnection(fullUrl, tUser,
+        tPassword);
         Statement statement = connection.createStatement()) {
 
       // Execute SQL statement to create the table
-      statement.execute(createTableSQL);
+      statement.execute(command);
 
-      System.out.println("Trino table created successfully.");
+      logger.info("Trino table created successfully.");
 
     } catch (SQLException e) {
-      System.out.println("Error: " + e.getMessage());
+      logger.error("Error: " + e.getMessage());
       e.printStackTrace();
     }
   }
 
   public static String sparkTypeToTrinoType(DataType sparkType) {
     if (sparkType instanceof StringType) {
-        return "VARCHAR";
+      return "VARCHAR";
     } else if (sparkType instanceof IntegerType) {
-        return "INTEGER";
+      return "INTEGER";
     } else if (sparkType instanceof LongType) {
-        return "BIGINT";
+      return "BIGINT";
     } else if (sparkType instanceof DoubleType) {
-        return "DOUBLE";
+      return "DOUBLE";
     } else if (sparkType instanceof FloatType) {
-        return "REAL";
+      return "REAL";
     } else if (sparkType instanceof BooleanType) {
-        return "BOOLEAN";
+      return "BOOLEAN";
     } else if (sparkType instanceof ShortType) {
-        return "SMALLINT";
+      return "SMALLINT";
     } else if (sparkType instanceof ByteType) {
-        return "TINYINT";
+      return "TINYINT";
     } else if (sparkType instanceof DecimalType) {
-        return "DECIMAL";
+      return "DECIMAL";
     } else if (sparkType instanceof DateType) {
-        return "DATE";
+      return "DATE";
     } else if (sparkType instanceof TimestampType) {
-        return "TIMESTAMP";
+      return "TIMESTAMP";
     } else if (sparkType instanceof BinaryType) {
-        return "VARBINARY";
+      return "VARBINARY";
     } else if (sparkType instanceof ArrayType) {
-        return "ARRAY<" + sparkTypeToTrinoType(((ArrayType) sparkType).elementType()) + ">";
+      return "ARRAY<" + sparkTypeToTrinoType(((ArrayType) sparkType).elementType()) + ">";
     } else if (sparkType instanceof MapType) {
-        MapType mapType = (MapType) sparkType;
-        return "MAP<" + sparkTypeToTrinoType(mapType.keyType()) + "," + sparkTypeToTrinoType(mapType.valueType()) + ">";
+      MapType mapType = (MapType) sparkType;
+      return "MAP<" + sparkTypeToTrinoType(mapType.keyType()) + "," + sparkTypeToTrinoType(mapType.valueType()) + ">";
     } else if (sparkType instanceof StructType) {
-        StructType structType = (StructType) sparkType;
-        StringBuilder sb = new StringBuilder("ROW<");
-        for (int i = 0; i < structType.fields().length; i++) {
-            if (i > 0) {
-                sb.append(",");
-            }
-            StructField field = structType.fields()[i];
-            sb.append(field.name()).append(":").append(sparkTypeToTrinoType(field.dataType()));
+      StructType structType = (StructType) sparkType;
+      StringBuilder sb = new StringBuilder("ROW<");
+      for (int i = 0; i < structType.fields().length; i++) {
+        if (i > 0) {
+          sb.append(",");
         }
-        sb.append(">");
-        return sb.toString();
+        StructField field = structType.fields()[i];
+        sb.append(field.name()).append(":").append(sparkTypeToTrinoType(field.dataType()));
+      }
+      sb.append(">");
+      return sb.toString();
     } else {
-        // Default case if the type is not recognized
-        return "UNKNOWN";
+      // Default case if the type is not recognized
+      return "UNKNOWN";
     }
-}
+  }
 
-  private static String generateTrinoDDL(String tableName, String bucketPath, StructType sparkSchema) {
+  private static void doMigrate(SparkSession spark, String jdbcUrl, String dbName, String dbTable, String user,
+      String password, String bucketPath, String trinoDbName, String trinoSchema) {
+    String tableLocation = String.format("%s/%s", bucketPath, dbTable);
+    boolean deltaTableExists = DeltaTable.isDeltaTable(spark, tableLocation);
+    if (deltaTableExists) {
+      logger.warn("Table {} is exists. Please check again.", dbTable);
+      return;
+    }
+
+    String url = String.format("%s/%s", jdbcUrl, dbName);
+    logger.info("url: {}", url);
+
+    // Read data from JDBC source into DataFrame
+    Dataset<Row> jdbcDF = spark.read()
+        .format("jdbc")
+        .option("url", url)
+        .option("dbtable", dbTable)
+        .option("user", user)
+        .option("password", password)
+        .load();
+
+    // Write DataFrame as Delta table
+    StructType schema = jdbcDF.schema();
+
+    String ddl = generateTrinoDDL(spark, trinoDbName, trinoSchema, dbTable, bucketPath, schema);
+    logger.info("DDL: {}", ddl);
+    executeTrinoQL(dotenv.get("TRINO_URL"), dotenv.get("TRINO_DBNAME"), dotenv.get("TRINO_SCHEMA"),
+        dotenv.get("TRINO_USER"), dotenv.get("TRINO_PASSWORD"), ddl);
+
+  }
+
+  private static String generateTrinoDDL(SparkSession spark, String trinoDbName, String trinoSchema, String tableName,
+      String bucketPath,
+      StructType sparkSchema) {
+
     StringBuilder ddlBuilder = new StringBuilder();
 
     String tableLocation = String.format("%s/%s", bucketPath, tableName);
 
+    String fullTableName = String.format("%s.%s.%s", trinoDbName, trinoSchema, tableName);
+
     // Start with the CREATE TABLE statement
     ddlBuilder.append("CREATE TABLE IF NOT EXISTS ")
-        .append(tableName)
+        .append(fullTableName)
         .append(" (");
 
     // Append column definitions
     for (StructField field : sparkSchema.fields()) {
-      String columnName = field.name();
+      String columnName = String.format("\"%s\"", field.name());
       DataType dataType = field.dataType();
 
       String trinoType = sparkTypeToTrinoType(dataType);
@@ -153,40 +178,17 @@ public class ImipDataMigrate {
         .enableHiveSupport()
         .getOrCreate();
 
-    // Properties props = new Properties();
-    // props.put("user", "postgres");
-    // props.put("password", "postgres");
-    // // props.put("driver", "org.postgresql.Driver");
-    // Dataset<Row> jdbcDF2 = spark.read()
-    //     .jdbc("jdbc:postgresql://localhost:5432/tinode", "messages", props);
-    // jdbcDF2.show();
-    // jdbcDF2.printSchema();
+    doMigrate(spark,
+        dotenv.get("JDBC_URL"),
+        dotenv.get("JDBC_DB_NAME"),
+        dotenv.get("JDBC_TABLE_NAME"),
+        dotenv.get("JDBC_USER"),
+        dotenv.get("JDBC_PASSWORD"),
+        dotenv.get("BUCKET_PATH"),
+        dotenv.get("TRINO_DBNAME"),
+        dotenv.get("TRINO_SCHEMA"));
 
-    // Delta table path
-    String deltaTablePath = "s3a://imip-delta-lake/messages2";
-    // Check if Delta table exists
-    boolean deltaTableExists = DeltaTable.isDeltaTable(spark, deltaTablePath);
-    deltaTableExists = false;
-
-    if (!deltaTableExists) {
-      // Read data from JDBC source into DataFrame
-      Dataset<Row> jdbcDF = spark.read()
-          .format("jdbc")
-          .option("url", "jdbc:postgresql://localhost:5432/tinode")
-          .option("dbtable", "messages")
-          .option("user", "postgres")
-          .option("password", "postgres")
-          .load();
-
-      // Write DataFrame as Delta table
-      StructType schema = jdbcDF.schema();
-      // Map Spark SQL data types to Trino data types
-      String trinoDDL = generateTrinoDDL("messages2", "s3a://imip-delta-lake", schema);
-
-      logger.info("trinoDDL: {}", trinoDDL);
-      
-      // Stop SparkSession
-      spark.stop();
-    }
+    // Stop SparkSession
+    spark.stop();
   }
 }
