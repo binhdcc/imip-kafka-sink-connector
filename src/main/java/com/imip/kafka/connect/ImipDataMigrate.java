@@ -6,6 +6,7 @@ import org.apache.spark.sql.Row;
 import org.apache.spark.sql.SparkSession;
 import org.apache.spark.sql.catalog.Table;
 import org.apache.spark.sql.types.DataType;
+import org.apache.spark.sql.types.*;
 import org.apache.spark.sql.types.StructField;
 import org.apache.spark.sql.types.StructType;
 
@@ -13,7 +14,6 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.sql.Statement;
-import java.util.Properties;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -53,33 +53,58 @@ public class ImipDataMigrate {
     }
   }
 
-  private static String sparkTypeToTrinoType(DataType sparkType) {
-    // Map Spark data types to Trino data types
-    if (sparkType instanceof org.apache.spark.sql.types.IntegerType) {
-      return "INTEGER";
-    } else if (sparkType instanceof org.apache.spark.sql.types.LongType) {
-      return "BIGINT";
-    } else if (sparkType instanceof org.apache.spark.sql.types.DoubleType) {
-      return "DOUBLE";
-    } else if (sparkType instanceof org.apache.spark.sql.types.FloatType) {
-      return "REAL";
-    } else if (sparkType instanceof org.apache.spark.sql.types.DecimalType) {
-      return "DECIMAL";
-    } else if (sparkType instanceof org.apache.spark.sql.types.StringType) {
-      return "VARCHAR";
-    } else if (sparkType instanceof org.apache.spark.sql.types.BooleanType) {
-      return "BOOLEAN";
-    } else if (sparkType instanceof org.apache.spark.sql.types.DateType) {
-      return "DATE";
-    } else if (sparkType instanceof org.apache.spark.sql.types.TimestampType) {
-      return "TIMESTAMP";
+  public static String sparkTypeToTrinoType(DataType sparkType) {
+    if (sparkType instanceof StringType) {
+        return "VARCHAR";
+    } else if (sparkType instanceof IntegerType) {
+        return "INTEGER";
+    } else if (sparkType instanceof LongType) {
+        return "BIGINT";
+    } else if (sparkType instanceof DoubleType) {
+        return "DOUBLE";
+    } else if (sparkType instanceof FloatType) {
+        return "REAL";
+    } else if (sparkType instanceof BooleanType) {
+        return "BOOLEAN";
+    } else if (sparkType instanceof ShortType) {
+        return "SMALLINT";
+    } else if (sparkType instanceof ByteType) {
+        return "TINYINT";
+    } else if (sparkType instanceof DecimalType) {
+        return "DECIMAL";
+    } else if (sparkType instanceof DateType) {
+        return "DATE";
+    } else if (sparkType instanceof TimestampType) {
+        return "TIMESTAMP";
+    } else if (sparkType instanceof BinaryType) {
+        return "VARBINARY";
+    } else if (sparkType instanceof ArrayType) {
+        return "ARRAY<" + sparkTypeToTrinoType(((ArrayType) sparkType).elementType()) + ">";
+    } else if (sparkType instanceof MapType) {
+        MapType mapType = (MapType) sparkType;
+        return "MAP<" + sparkTypeToTrinoType(mapType.keyType()) + "," + sparkTypeToTrinoType(mapType.valueType()) + ">";
+    } else if (sparkType instanceof StructType) {
+        StructType structType = (StructType) sparkType;
+        StringBuilder sb = new StringBuilder("ROW<");
+        for (int i = 0; i < structType.fields().length; i++) {
+            if (i > 0) {
+                sb.append(",");
+            }
+            StructField field = structType.fields()[i];
+            sb.append(field.name()).append(":").append(sparkTypeToTrinoType(field.dataType()));
+        }
+        sb.append(">");
+        return sb.toString();
     } else {
-      return "VARCHAR"; // Default to VARCHAR for unsupported types
+        // Default case if the type is not recognized
+        return "UNKNOWN";
     }
-  }
+}
 
-  private static String generateTrinoDDL(String tableName, StructType sparkSchema) {
+  private static String generateTrinoDDL(String tableName, String bucketPath, StructType sparkSchema) {
     StringBuilder ddlBuilder = new StringBuilder();
+
+    String tableLocation = String.format("%s/%s", bucketPath, tableName);
 
     // Start with the CREATE TABLE statement
     ddlBuilder.append("CREATE TABLE IF NOT EXISTS ")
@@ -102,7 +127,7 @@ public class ImipDataMigrate {
 
     // Close the table definition
     ddlBuilder.append(")");
-
+    ddlBuilder.append(" WITH (location = '").append(tableLocation).append("')");
     return ddlBuilder.toString();
   }
 
@@ -128,14 +153,14 @@ public class ImipDataMigrate {
         .enableHiveSupport()
         .getOrCreate();
 
-    Properties props = new Properties();
-    props.put("user", "postgres");
-    props.put("password", "postgres");
-    // props.put("driver", "org.postgresql.Driver");
-    Dataset<Row> jdbcDF2 = spark.read()
-        .jdbc("jdbc:postgresql://localhost:5432/tinode", "messages", props);
-    jdbcDF2.show();
-    jdbcDF2.printSchema();
+    // Properties props = new Properties();
+    // props.put("user", "postgres");
+    // props.put("password", "postgres");
+    // // props.put("driver", "org.postgresql.Driver");
+    // Dataset<Row> jdbcDF2 = spark.read()
+    //     .jdbc("jdbc:postgresql://localhost:5432/tinode", "messages", props);
+    // jdbcDF2.show();
+    // jdbcDF2.printSchema();
 
     // Delta table path
     String deltaTablePath = "s3a://imip-delta-lake/messages2";
@@ -156,7 +181,7 @@ public class ImipDataMigrate {
       // Write DataFrame as Delta table
       StructType schema = jdbcDF.schema();
       // Map Spark SQL data types to Trino data types
-      String trinoDDL = generateTrinoDDL("messages2", schema);
+      String trinoDDL = generateTrinoDDL("messages2", "s3a://imip-delta-lake", schema);
 
       logger.info("trinoDDL: {}", trinoDDL);
       
