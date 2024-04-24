@@ -156,6 +156,21 @@ public class ImipDataMigrate {
     return ddlBuilder.toString();
   }
 
+  public static void doMigrageMultiple(SparkSession spark, String jdbcUrl, String dbName, String user,
+      String password, String bucketPath, String trinoDbName, String trinoSchema) {
+    String[] tables = loadJdbcTablesFromEnv(dotenv);
+    for (String tableName : tables) {
+      doMigrate(spark, jdbcUrl, dbName, tableName, user, password, bucketPath, trinoDbName, trinoSchema);
+    }
+
+  }
+
+  public static String[] loadJdbcTablesFromEnv(Dotenv dotenv) {
+    String data = dotenv.get("JDBC_TABLE_NAME");
+    String[] tables = data.split(",");
+    return tables;
+  }
+
   public static void main(String[] args) {
     SparkConf conf = new SparkConf()
         .setAppName("ImipDataMigrate")
@@ -178,10 +193,9 @@ public class ImipDataMigrate {
         .enableHiveSupport()
         .getOrCreate();
 
-    doMigrate(spark,
+        doMigrageMultiple(spark,
         dotenv.get("JDBC_URL"),
         dotenv.get("JDBC_DB_NAME"),
-        dotenv.get("JDBC_TABLE_NAME"),
         dotenv.get("JDBC_USER"),
         dotenv.get("JDBC_PASSWORD"),
         dotenv.get("BUCKET_PATH"),
