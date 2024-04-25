@@ -109,8 +109,9 @@ public class ImipDataMigrate {
         .option("dbtable", dbTable)
         .option("user", user)
         .option("password", password)
-        .load();
-
+        .load().
+        limit(1);
+    logger.info("Row count: {}", jdbcDF.count());
     // Write DataFrame as Delta table
     StructType schema = jdbcDF.schema();
 
