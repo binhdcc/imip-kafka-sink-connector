@@ -19,6 +19,8 @@ import org.slf4j.LoggerFactory;
 import java.util.Arrays;
 import java.util.List;
 import java.util.HashSet;
+import java.util.Map;
+import java.util.HashMap;
 import java.util.Set;
 import java.util.UUID;
 import io.github.cdimascio.dotenv.Dotenv;
@@ -26,9 +28,11 @@ public class ImipKafkaOperator {
     
     private final static Dotenv dotenv = Dotenv.load();
     private final static Logger logger = LoggerFactory.getLogger(ImipKafkaOperator.class);
+    private static Map<String, Dataset<Row>> tablePathMap;
+
     // This method testing show data only
     public static void showTable(SparkSession spark, String fullPathTable) {
-        Dataset<Row> df = spark.read().format("delta").load(fullPathTable);
+        Dataset<Row> df = loadTable(spark, fullPathTable);
         df.show();
     }
 
@@ -38,12 +42,21 @@ public class ImipKafkaOperator {
         Set<String> listTopics = new HashSet<>(Arrays.asList(topics));
         return listTopics;
     }
+    
+    private static Dataset<Row> loadTable(SparkSession spark, String path){
+        if(tablePathMap.containsKey(path)){
+            logger.info("cache load table ", path);
+            return tablePathMap.get(path);
+        }
+        Dataset<Row> table =  spark.read().format("delta").load(path);
+        tablePathMap.put(path, table);
+        return table;
+    }
 
-    public static void upsertRecordDelta(SparkSession spark, String fullPathTable, JsonObject conditions, JsonObject data) {
+    private static void upsertRecordDelta(SparkSession spark, String fullPathTable, JsonObject conditions, JsonObject data) {
         String[] keyColumns = conditions.keySet().toArray(String[]::new);
         // Read the Delta table
-        Dataset<Row> deltaTable = spark.read().format("delta").load(fullPathTable);
-
+        Dataset<Row> deltaTable = loadTable(spark, fullPathTable);
        // Perform the upsert
        deltaTable.createOrReplaceTempView("deltaTable");
 
@@ -64,7 +77,7 @@ public class ImipKafkaOperator {
        spark.sql(mergeQuery);
     }
 
-    public static void createRecordDelta(SparkSession spark, String fullPathTable, JsonObject data) {
+    private static void createRecordDelta(SparkSession spark, String fullPathTable, JsonObject data) {
         List<String> jsonData = Arrays.asList(data.get("after").toString());
         Dataset<String> tempDataSet = spark.createDataset(jsonData, Encoders.STRING());
         Dataset<Row> df = spark.read().json(tempDataSet);
@@ -75,11 +88,11 @@ public class ImipKafkaOperator {
                 .save(fullPathTable);
     }
 
-    public static void updateRecordDelta(SparkSession spark, String fullPathTable, JsonObject conditions,
+    private static void updateRecordDelta(SparkSession spark, String fullPathTable, JsonObject conditions,
             JsonObject updates) {
         try {
             logger.info("data in updateRecordDelta: '{}':'{}'", conditions.toString(), updates.toString());
-            Dataset<Row> deltaTable = spark.read().format("delta").load(fullPathTable);
+            Dataset<Row> deltaTable = loadTable(spark, fullPathTable);
             Dataset<Row> filteredData = deltaTable;
             for (String column : conditions.keySet()) {
                 String value = conditions.get(column).getAsString();
@@ -100,7 +113,7 @@ public class ImipKafkaOperator {
         }
     }
 
-    public static void deleteRecordDelta(SparkSession spark, String fullPathTable, JsonObject conditions) {
+    private static void deleteRecordDelta(SparkSession spark, String fullPathTable, JsonObject conditions) {
         try {
             DeltaTable deltaTable = DeltaTable.forPath(fullPathTable);
 
@@ -150,7 +163,8 @@ public class ImipKafkaOperator {
         props.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class.getName());
         props.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest");
 
-
+        //init tablePathMap
+        tablePathMap = new HashMap<>();
         // Create Kafka consumer
         KafkaConsumer<String, String> consumer = new KafkaConsumer<>(props);
 

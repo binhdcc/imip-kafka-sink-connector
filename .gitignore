@@ -2,3 +2,10 @@ target
 .idea
 .env
 dependency-reduced-pom.xml
+.vs/slnx.sqlite
+.vs/VSWorkspaceState.json
+.vs/imip-kafka-sink-connector/FileContentIndex/548ee59a-e1b2-4fab-8323-efde428406e2.vsidx
+.vs/imip-kafka-sink-connector/v17/.wsuo
+.vs/imip-kafka-sink-connector/v17/DocumentLayout.json
+src/main/main.iml
+src/test/test.iml
