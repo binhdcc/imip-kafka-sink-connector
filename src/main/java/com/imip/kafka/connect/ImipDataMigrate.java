@@ -4,10 +4,7 @@ import org.apache.spark.SparkConf;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.SparkSession;
-import org.apache.spark.sql.types.DataType;
 import org.apache.spark.sql.types.*;
-import org.apache.spark.sql.types.StructField;
-import org.apache.spark.sql.types.StructType;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -27,8 +24,15 @@ public class ImipDataMigrate {
       String command) {
     // Establish JDBC connection to Trino
     String fullUrl = String.format("%s/%s/%s", tUrl, tDbName, tSchema);
-    try (Connection connection = DriverManager.getConnection(fullUrl, tUser,
-        tPassword);
+    try{
+      Class.forName("io.trino.jdbc.TrinoDriver");
+    }catch( Exception e){
+      e.printStackTrace();
+    }
+
+    try (
+      Connection connection = DriverManager.getConnection(fullUrl, tUser,
+          tPassword);
         Statement statement = connection.createStatement()) {
 
       // Execute SQL statement to create the table
@@ -36,7 +40,7 @@ public class ImipDataMigrate {
 
       logger.info("Trino table created successfully.");
 
-    } catch (SQLException e) {
+    } catch (Exception e) {
       logger.error("Error: " + e.getMessage());
       e.printStackTrace();
     }
@@ -99,16 +103,17 @@ public class ImipDataMigrate {
       return;
     }
 
-    String url = String.format("%s/%s", jdbcUrl, dbName);
-    logger.info("url: {}", url);
+    String url = String.format("%s", jdbcUrl);
+    logger.info("url : {}", url);
 
     // Read data from JDBC source into DataFrame
     Dataset<Row> jdbcDF = spark.read()
         .format("jdbc")
         .option("url", url)
         .option("dbtable", dbTable)
-        .option("user", user)
-        .option("password", password)
+        // .option("user", user)
+        // .option("password", password)
+        .option("driver", "com.microsoft.sqlserver.jdbc.SQLServerDriver")
         .load().
         limit(1);
     logger.info("Row count: {}", jdbcDF.count());
@@ -193,6 +198,11 @@ public class ImipDataMigrate {
         .config("spark.delta.logStore.class", "org.apache.spark.sql.delta.storage.S3SingleDriverLogStore")
         .enableHiveSupport()
         .getOrCreate();
+      try{
+        Class.forName("com.microsoft.sqlserver.jdbc.SQLServerDriver");
+      }catch( Exception e){
+        e.printStackTrace();
+      }
 
         doMigrageMultiple(spark,
         dotenv.get("JDBC_URL"),

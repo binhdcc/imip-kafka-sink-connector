@@ -169,6 +169,11 @@
 			</version>
 		</dependency>
 		<dependency>
+			<groupId>io.trino</groupId>
+			<artifactId>trino-jdbc</artifactId>
+			<version>447</version>
+		</dependency>
+		<dependency>
 			<groupId>
 				org.codehaus.janino
 			</groupId>
